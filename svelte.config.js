@@ -12,15 +12,20 @@ const config = {
 		adapter: adapter(),
 		prerender: {
 			entries: [
-				"*",
-				"/api/posts/page/*",
-				"/blog/category/*/page/",
-				"/blog/category/*/page/*",
-				"/blog/category/page/",
-				"/blog/category/page/*",
-				"/blog/page/",
-				"/blog/page/*",
+				// "*",
+				// "/api/posts/page/*",
+				// "/blog/category/*/page/",
+				// "/blog/category/*/page/*",
+				// "/blog/category/page/",
+				// "/blog/category/page/*",
+				// "/blog/page/",
+				// "/blog/page/*",
+				"/",
+				"/about",
+				"/blog",
+				"/blog/category"
 			],
+			crawl: true // Let SvelteKit discover pages automatically
 		},
 	},
 
