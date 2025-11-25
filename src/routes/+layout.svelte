@@ -3,7 +3,7 @@
 	import { run } from 'svelte/legacy';
 
 	import Header from '$lib/components/Header.svelte';
-	import Footer from '$lib/components/Footer.svelte';
+	// import Footer from '$lib/components/Footer.svelte';
 	import { currentPage, isMenuOpen } from '../lib/assets/js/store.js';
 	import { navItems } from '$lib/config';
 	import { preloadCode } from '$app/navigation';
@@ -12,8 +12,8 @@
 	import { siteTitle, siteURL } from '$lib/config.js';
 	let { data, children } = $props();
 
-	const transitionIn = { delay: 150, duration: 150 };
-	const transitionOut = { duration: 100 };
+	const transitionIn = { delay: 300, duration: 300 };
+	const transitionOut = { duration: 0 };
 
 	/**
 	 * Updates the global store with the current path. (Used for highlighting
@@ -49,12 +49,7 @@
 	<link rel="stylesheet" href="/css/utilities.css" />
 	<link rel="stylesheet" href="/css/code.css" />
 	<link rel="stylesheet" href="/css/prism.css" />
-	<link
-		rel="alternate"
-		type="application/rss+xml"
-		title={siteTitle}
-		href="http://{siteURL}/api/rss.xml"
-	/>
+
 </svelte:head>
 
 <!--
@@ -68,5 +63,5 @@
 			{@render children?.()}
 		</main>
 	{/key}
-	<Footer />
+	<!-- <Footer /> -->
 </div>

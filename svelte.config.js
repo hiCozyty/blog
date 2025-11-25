@@ -23,7 +23,7 @@ const config = {
 				"/",
 				"/about",
 				"/blog",
-				"/blog/category"
+				"/blog/category",
 			],
 			crawl: true // Let SvelteKit discover pages automatically
 		},

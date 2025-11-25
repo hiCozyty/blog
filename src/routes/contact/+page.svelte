@@ -1,58 +1,81 @@
-<script>
-	import { createBubbler, preventDefault } from 'svelte/legacy';
+<div class="contact-container">
 
-	const bubble = createBubbler();
-	import Callout from '$lib/components/Callout.svelte'
-</script>
-
-
-<svelte:head>
-	<title>Contact</title>
-</svelte:head>
-
-
-<h1>Contact</h1>
-
-This starter was made by Josh Collinsworth. You can <a rel="external" href="https://joshcollinsworth.com/contact">get in touch with Josh here</a>.
-
-If you're using this starter for your own site, feel free to delete this page, or replace it with a contact page of your own. (I'm a big fan of <a href="https://docs.netlify.com/forms/setup/">Netlify forms</a>, personally.)
-
-<Callout>This form does nothing! It's just here to show default styling.</Callout>
-
-<form onsubmit={preventDefault(bubble('submit'))}>
-	<div class="form-section">
-		<label for="name">Name</label>
-		<input type="text" id="name" placeholder="First name" />
-	</div>
-	
-	<div class="form-section">
-		<label for="email">Email</label>
-		<input type="email" id="email" placeholder="Email address" />
+	<div class="contact-item">
+		<h2>
+			<a href="https://github.com/hicozyty" target="_blank" rel="noopener noreferrer">
+				My GitHub
+			</a>
+		</h2>
 	</div>
 
-	<fieldset>
-		<legend>
-			Which option?
-		</legend>
-
-		<div>
-			<input type="radio" name="s" id="s1" value="s1">
-			<label for="s1">Option 1</label>
-		</div>
-		<div>
-			<input type="radio" name="s" id="s2" value="s2">
-			<label for="s2">Option 2</label>
-		</div>
-		<div>
-			<input type="radio" name="s" id="s3" value="s3">
-			<label for="s3">Option 3</label>
-		</div>
-	</fieldset>
-
-	<div class="form-section">
-		<input type="checkbox" id="c1" >
-		<label for="c1">Sign me up for something!</label>
+	<div class="contact-item">
+		<h2>
+			<a href="sgnl://signal.me/#u/cozyty.443" target="_blank" rel="noopener noreferrer">
+				Signal Contact
+			</a>
+		</h2>
+		<img 
+			src="/images/signalContact.jpg" 
+			alt="Signal QR Code" 
+			style="width:150px; height:auto; display: block;" 
+		/>
 	</div>
 
-	<input type="submit" value="Do nothing!">
-</form>
+</div>
+
+<style>
+    .contact-container {
+		/* border:1px black solid; */
+        /* Ensures content starts from the left */
+        text-align: left;
+        /* Reduce space inside the bordered container and remove extra top spacing */
+        padding: 0.5rem 0.75rem;
+    }
+
+    .contact-item {
+        margin-bottom: 100px; /* Adds vertical space between the GitHub and Signal sections */
+    }
+
+h2 a {
+        /* Base styles */
+        text-decoration: none;
+        color: inherit;
+        
+        /* Updated transition for smoothness */
+        transition: 
+            background-color 0.2s ease-in-out, 
+            transform 0.1s ease-out, /* Added transform for movement */
+            box-shadow 0.1s ease-out; /* Added box-shadow for depth */
+            
+        display: inline-block; 
+        padding: 5px 10px;
+        background-color: transparent;
+        border-radius: 25px;    
+        
+        /* Initial State: Add a subtle shadow for perceived depth */
+        /* box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.2);  */
+    }
+
+    h2 a:hover {
+        /* Hover bubble effect */
+        background-color: var(--lightAccent);
+        color: inherit;
+        /* Increase shadow slightly on hover for visual pop */
+        /* box-shadow: 3px 3px 8px rgba(0, 0, 0, 0.3); */
+    }
+    
+    /* 💥 NEW: Active (Click) State for "Pressing" Effect 💥 */
+    h2 a:active {
+        /* 1. Move element */
+        transform: translate(1px, 1px); 
+        
+        /* 2. Shrink shadow (makes it look pressed down/flush) */
+        /* box-shadow: 1px 1px 2px rgba(0, 0, 0, 0.2); */
+        
+        /* Optional: Change background color slightly while pressed */
+        background-color: color-mix(in srgb, var(--lightAccent) 80%, black);
+    }
+    :global(#main) {
+        margin-top: 2.5rem; /* was 6rem in layout.css; change to taste */
+    }
+</style>

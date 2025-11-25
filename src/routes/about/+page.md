@@ -2,20 +2,12 @@
 	<title>About</title>
 </svelte:head>
 
-# About
+# About This Blog
+This blog serves as a dedicated **portfolio** and **technical documentation** hub, showcasing new skills I pick up along the way as I transition into the cybersecurity field.
 
-This is an example of how you can have _markdown_ in page content!
+I like to **extract and visualize** actionable data. 
 
-- How
-- **Cool**
-- Is _that_!?
+Currently training at the **SANS Cyber Academy** (circa Q4 2025).
 
-If you like, you can also import markdown into any Svelte page.
+Thanks for reading!
 
-Anyway, you can find this file here:
-
-```
-src/routes/about/+page.md
-```
-
-Here's the [home link](/) if you wanna go back.
