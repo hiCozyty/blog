@@ -5,7 +5,7 @@
 
 <ul class="posts-list">
 	{#each posts as post}
-		<li>
+		<li class="no-select">
 			<article>
 				<a href="/blog/{post.slug}">
 					<img

@@ -1,3 +1,3 @@
 # November 2025
 
-[Setting up a lab on Oracle Cloud](/blog/setting-up-a-lab-on-oracle-cloud)
+[Splunk Log Analysis On Oracle Cloud Instance](/blog/Splunk_Log_Analysis_On_Oracle_Cloud_Instance.md)

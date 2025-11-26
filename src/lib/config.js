@@ -5,6 +5,8 @@
  **/ 
 
 export const siteTitle = "cozyty's blog"
+export const siteDescription = "cozyty's blog"
+
 // export const siteAuthor = '- find and change this text in src/lib/config.js'
 
 // Controls how many posts are shown per page on the main blog index pages

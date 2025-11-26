@@ -9,7 +9,7 @@
 	import { preloadCode } from '$app/navigation';
 	import { onMount } from 'svelte';
 	import { fade } from 'svelte/transition';
-	import { siteTitle, siteURL } from '$lib/config.js';
+	import { siteTitle } from '$lib/config.js';
 	let { data, children } = $props();
 
 	const transitionIn = { delay: 300, duration: 300 };

@@ -60,3 +60,14 @@
 		</aside>
 	{/if}
 </article>
+
+<style>
+    .post-footer__categories a {
+        border-radius: 25px; /* Adjust this value - higher = rounder */
+    }
+    
+    /* Or target more specifically if needed */
+    .post-footer__categories li a {
+        border-radius: 25px;
+    }
+</style>

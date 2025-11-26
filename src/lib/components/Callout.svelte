@@ -11,3 +11,8 @@
 <div class="callout">
 	{@render children?.()}
 </div>
+<style>
+    .callout {
+        border-radius: 35px; /* Adjust this value to your preference */
+    }
+</style>

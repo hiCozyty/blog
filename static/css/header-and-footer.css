@@ -7,9 +7,6 @@ footer {
 :where(header, footer) a {
 	text-decoration: none;
 
-	&.active {
-		font-weight: bold;
-	}
 }
 
 :where(header, footer) nav ul {
@@ -20,10 +17,6 @@ footer {
 	gap: 0rem 1.5rem;
 	padding: 0;
 	margin: 0;
-}
-
-:where(header, footer) a:hover {
-	text-decoration: underline;
 }
 
 :where(header, footer) svg {

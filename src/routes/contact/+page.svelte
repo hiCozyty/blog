@@ -36,9 +36,9 @@
         margin-bottom: 100px; /* Adds vertical space between the GitHub and Signal sections */
     }
 
-h2 a {
+	h2 a {
         /* Base styles */
-        text-decoration: none;
+        text-decoration: underline;
         color: inherit;
         
         /* Updated transition for smoothness */
