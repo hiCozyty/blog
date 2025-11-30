@@ -46,7 +46,7 @@ This instance can remain free afterwards.
 </Callout>
 
 ## Objectives
-The endgoal for me is to produce a minimum working lab with secure logging attached where I can add more features to the log producing machine in the future based on my needs.
+The endgoal for me is to produce a minimum working lab with secure logging attached where I can add more features to the lab in the future based on my needs.
 
 * First I need to secure the machines in a way that, if the lab VM is compromised, my trusted device is protected. 
 
@@ -88,10 +88,16 @@ tailscale set --ssh --advertise-routes=10.0.0.0/24,169.254.169.254/32 --accept-d
 Then add Oracle DNS nameserver in the tailscale dashboard and approve the subnets.
 
 <Callout>
-For legal reasons, we will set the egress rule to DENY everything (with the exception of tailscale UDP and ICMP) inside the lab VM. Splunk learning is mostly parsing the initial point of contact logs.
+Following principles of least privilege, we will set the lab's egress rule to be restrictive to only allow certain ports needed for basic tailscale outbound communication. I will focus more on the parsing the initial point of contact logs. 
+
+* stateless = No, 
+* sourcePort = ALL 
+* destPort = 41641(UDP), 3478(UDP), 53(UDP), 443(TCP)
 
 Post-compromise activity is cool and interesting, but I believe they are for more out of scope topics like threat intelligence and incident response.
 </Callout>
+
+
 
 ## ssh logs 
 For this starter project, I will focus only on `/var/log/secure`, which hold ssh related logs. The next project will try to get other logs from sources such as intrusion detection systems, databases, web servers, etc. 
