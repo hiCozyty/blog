@@ -25,9 +25,9 @@ Me:
 Since I don't know anything about Oracle and Splunk. let's learn and create a project around them. Let's do it. 
 
 ### Introduction
-While my [personal homelab](https://github.com/hiCozyty/homelab) is still a work in progress, I'm not confident in its network security setup to host a vulnerable machine in my (even DMZ isolated) VLAN. I just don't feel comfortable.
+While my [personal homelab](https://github.com/hiCozyty/homelab) is still a work in progress, I'm not confident in its network security setup to host a vulnerable machine in my (DMZ isolated) VLAN. I just don't feel comfortable.
 
-So we turn to either AWS or Oracle Cloud who offer free plans. Since I'm already using AWS, Oracle it is. I know Azure also offer a generous plan, but I'm saving that for Windows stuff later down the road.  
+So I turn to either AWS or Oracle Cloud who offer free plans. Since I'm already using AWS, Oracle it is. I know Azure also offer a generous plan, but I'm saving that for Windows stuff later down the road.  
 
 For capturing potential sniffing or attacks, Oracle Cloud Infrastructure (OCI) provides an [in-house solution](https://blogs.oracle.com/observability/la-demystifying-agent-om-oci) called `OCI Observability and Management`, in which monitoring agents are deployed. The logs that are then automatically captured in the OCI log storage. 
 
@@ -50,14 +50,13 @@ The endgoal for me is to produce a minimum working lab with secure logging attac
 
 * First I need to secure the machines in a way that, if the lab VM is compromised, my trusted device is protected. 
 
-* When considering Splunk free tier's daily data ingestion limit, I would need to implement some sort of network rate limiter or debouncer in the lab machine.
+* When considering Splunk free tier's daily data ingestion limit, I would need to implement some sort of network rate limiter in the lab machine.
 
-* The jump server, which will allow me to access the lab VM securely, will also serve as a data storage server. It has a storage limit of around 50GB. I will implement an automatic data pruner. 
+* The jump server, which I will be using to access the lab VM, will also serve as a data storage server. It has a storage limit of around 50GB. I will implement an automatic data pruner.
 
-* I will need to implement some sort of data ingestion mechanism from the trusted device side. I'm leaning towards manual ingestion because I don't usually leave the machine on all day. I will figure this out when I get there.
+* I will need to implement some sort of data ingestion mechanism from the trusted device side. I'm leaning towards manual ingestion because I don't usually leave the device on all day. I will figure this out when I get there.
 
-* For log forwarding from lab to jump server to my trusted device, I will use rsyslog and Splunk universal forwarder. 
-
+* For log forwarding from lab to jump server to my trusted device, I will use Splunk universal forwarder. I will figure it out when I get there.
 
 ## Planned Topology
 ![topology](/static/blogImages/blog1/oracle_lab.jpg)
@@ -67,6 +66,7 @@ The endgoal for me is to produce a minimum working lab with secure logging attac
 * Oracle Cloud Instances (running AlmaLinux for both)
 * Splunk / Splunk universal forwarder
 * rsyslog
+* rsync
 * tailscale ACL
 
 ## Tailscale
@@ -76,6 +76,10 @@ For quick sanity check, I spun up a python http server from splunk then tred to 
 ```
 python3 -m http.server 8000
 ```
+
+I will also disable the key expiry for both jump server and lab in the dashboard.
+![key](/static/blogImages/blog1/tailscale_key_expire.png)
+
 
 ## Oracle Cloud Initial Configuration
 Let's look at the official tailscale [documentation](https://tailscale.com/kb/1149/cloud-oracle) for accessing Oracle Cloud VMs privately using tailscale.
@@ -88,16 +92,15 @@ tailscale set --ssh --advertise-routes=10.0.0.0/24,169.254.169.254/32 --accept-d
 Then add Oracle DNS nameserver in the tailscale dashboard and approve the subnets.
 
 <Callout>
-Following principles of least privilege, we will set the lab's egress rule to be restrictive to only allow certain ports needed for basic tailscale outbound communication. I will focus more on the parsing the initial point of contact logs. 
+Following principles of least privilege, I will set the lab's egress rule to be restrictive to only allow certain ports needed for basic tailscale outbound communication. I will focus more on parsing initial point of contact logs. 
 
-* stateless = No, 
+##### Minimum working lab egress rule
+* stateless = No
 * sourcePort = ALL 
-* destPort = 41641(UDP), 3478(UDP), 53(UDP), 443(TCP)
+* destPort = 41641(UDP), 3478(UDP), 53(UDP), 443(TCP), 80(TCP)
 
-Post-compromise activity is cool and interesting, but I believe they are for more out of scope topics like threat intelligence and incident response.
+Post-compromise activity is cool and interesting, but I believe they are for more out of scope topics like threat intelligence and incident response. I wil save this for another blog maybe.
 </Callout>
-
-
 
 ## ssh logs 
 For this starter project, I will focus only on `/var/log/secure`, which hold ssh related logs. The next project will try to get other logs from sources such as intrusion detection systems, databases, web servers, etc. 
@@ -106,10 +109,10 @@ Almalinux default rsyslog archive rate is every 7 days with a retention policy o
 
 What is rsyslog? It is a daemon that created the `/var/log/secure` directory and writes to it.
 
+###### Update Rotation Schedule for SSH Logs:
 ```
 sudo nano /etc/logrotate.d/secure-daily
 
-#Add this content:
 /var/log/secure
 {
     daily
@@ -118,33 +121,76 @@ sudo nano /etc/logrotate.d/secure-daily
     notifempty
     compress
     delaycompress
+    dateext
     sharedscripts
     postrotate
         /usr/bin/systemctl reload rsyslog.service >/dev/null 2>&1 || true
     endscript
 }
-
-# Remove `/var/log/secure` from the list, so it looks like:
-/var/log/cron
-/var/log/maillog
-/var/log/messages
-/var/log/spooler
-{
-    missingok
-    sharedscripts
-    postrotate
-        /usr/bin/systemctl reload rsyslog.service >/dev/null 2>&1 || true
-    endscript
-}
-#check for syntax errors
+```
+###### check for syntax errors
+```
 sudo logrotate -d /etc/logrotate.d/secure-daily
+```
 
-#force a rotation to test (actually rotates the file)
+###### force a rotation to test (actually rotates the file)
+```
 sudo logrotate -f /etc/logrotate.d/secure-daily
 
 #verify it worked
 ls -lh /var/log/secure*
+```
 
+## Playing Around With the OCI SDK
+First, let's add environmental variable for securitylist OCID value SECURITY_LIST_OCID. This value can be found in the console. 
+```
+sudo nano /etc/environment
+# add this line
+SECURITY_LIST_OCID="ocid1.securitylist.oc1...."
+```
+Let's test out some flags to see if I can edit the ingress rules.
+```
+oci network security-list get --security-list-id "$SECURITY_LIST_OCID" --query 'data."ingress-security-rules"' --output json > current.json
+
+cat current.json
+```
+
+For testing purposes, I will create a new ingress rule to allow port 5555
+```
+jq '. += [
+  {
+    "source": "0.0.0.0/0",
+    "protocol": "6",
+    "tcpOptions": {
+      "destinationPortRange": { "min": 5555, "max": 5555 }
+    },
+    "isStateless": false,
+    "description": "TEMP TEST: TCP 5555"
+  }
+]' current.json > new.json
+
+oci network security-list update --security-list-id "$SECURITY_LIST_OCID" --ingress-security-rules "$(cat new.json)"
+
+WARNING: Updates to defined-tags and egress-security-rules and freeform-tags and ingress-security-rules will replace any existing values. Are you sure you want to continue? [y/N]: y
+```
+
+Create a new user called Bob and create a temporary http server.
+```
+sudo useradd bob
+sudo -iu bob
+mkdir /home/bob/test
+cd /home/bob/test
+python3 -m http.server 5555
+```
+
+Test from jump server
+```
+curl http://LAB_PUBLIC_IP:5555
+```
+
+After verifying it works, restore original ingress rules and try again. It should no longer work.
+```
+oci network security-list update --security-list-id "$SECURITY_LIST_OCID" --ingress-security-rules "$(cat current.json)"
 ```
 
 ## Configuring OCI CLI And Creating A Cronjob Log Size Watcher
@@ -152,160 +198,488 @@ OCI provides a CLI tool SDK wrapper for managing ingress and egress rules direct
 
 Since I updated the data archive rate to daily earlier, once the log size resets, the watcher will automatically restore the ingress rule to allow traffic again. 
 
+###### Install OCI CLI SDK And Configure It
 ```
-# Install OCI CLI
 bash -c "$(curl -L https://raw.githubusercontent.com/oracle/oci-cli/master/scripts/install/install.sh)"
-
-# Configure with your credentials using OCID, Tenancy OCID, region, and API key (generate in OCI Console → User Settings → API Keys)
-oci setup config
-
-# List your VCN
-oci network vcn list --compartment-id <my-compartment-ocid>
-
-# List security lists for your VCN
-oci network security-list list --compartment-id <my-compartment-ocid> --vcn-id <my-vcn-ocid>
-
-# Save your security list OCID for the below script
 ```
-Create a monitoring script with OCI cli
+
+###### Configure OCI CLI with credentials
+I got these values from the console:
+* OCID
+* Tenancy OCID
+* region
+* API key
+
+I followed the steps from the CLI tool.
+```
+oci setup config
+# for user OCID and tenancy OCID, they are in the console under User Settings
+
+# generate the RSA key pair from the console settings and select default directory 
+
+Do you want to generate a new API Signing RSA key pair? (If you decline you will be asked to supply the path to an existing key.) [Y/n]:
+Enter a directory for your keys to be created [/home/opc/.oci]:
+Enter a name for your key [oci_api_key]: oci_api_key
+
+# Copy the public key and paste into the dashboard API key settings
+```
+
+###### Then test out the API authentication
+```
+oci iam availability-domain list
+```
+
+###### Log Size Monitor Setup
+I created a default and deny ingress rules json file.
+```
+nano /home/opc/default-rules.json
+[
+  {
+    "description": "SSH Access",
+    "icmp-options": null,
+    "is-stateless": false,
+    "protocol": "6",
+    "source": "0.0.0.0/0",
+    "source-type": "CIDR_BLOCK",
+    "tcp-options": {
+      "destination-port-range": {
+        "max": 22,
+        "min": 22
+      },
+      "source-port-range": null
+    },
+    "udp-options": null
+  },
+  {
+    "description": "ICMP Type 3 Code 4",
+    "icmp-options": {
+      "code": 4,
+      "type": 3
+    },
+    "is-stateless": false,
+    "protocol": "1",
+    "source": "0.0.0.0/0",
+    "source-type": "CIDR_BLOCK",
+    "tcp-options": null,
+    "udp-options": null
+  },
+  {
+    "description": "ICMP Type 3 Internal",
+    "icmp-options": {
+      "code": null,
+      "type": 3
+    },
+    "is-stateless": false,
+    "protocol": "1",
+    "source": "10.0.0.0/16",
+    "source-type": "CIDR_BLOCK",
+    "tcp-options": null,
+    "udp-options": null
+  },
+  {
+    "description": "Tailscale UDP",
+    "icmp-options": null,
+    "is-stateless": true,
+    "protocol": "17",
+    "source": "0.0.0.0/0",
+    "source-type": "CIDR_BLOCK",
+    "tcp-options": null,
+    "udp-options": {
+      "destination-port-range": {
+        "max": 41641,
+        "min": 41641
+      },
+      "source-port-range": null
+    }
+  }
+]
+
+nano /home/opc/deny-all-rules.json
+[
+  {
+    "description": "ICMP Type 3 Code 4",
+    "icmp-options": {
+      "code": 4,
+      "type": 3
+    },
+    "is-stateless": false,
+    "protocol": "1",
+    "source": "0.0.0.0/0",
+    "source-type": "CIDR_BLOCK",
+    "tcp-options": null,
+    "udp-options": null
+  },
+  {
+    "description": "ICMP Type 3 Internal",
+    "icmp-options": {
+      "code": null,
+      "type": 3
+    },
+    "is-stateless": false,
+    "protocol": "1",
+    "source": "10.0.0.0/16",
+    "source-type": "CIDR_BLOCK",
+    "tcp-options": null,
+    "udp-options": null
+  },
+  {
+    "description": "Tailscale UDP Only",
+    "icmp-options": null,
+    "is-stateless": true,
+    "protocol": "17",
+    "source": "0.0.0.0/0",
+    "source-type": "CIDR_BLOCK",
+    "tcp-options": null,
+    "udp-options": {
+      "destination-port-range": {
+        "max": 41641,
+        "min": 41641
+      },
+      "source-port-range": null
+    }
+  }
+]
+```
+
+Then I set proper permissions:
+```
+chmod 600 /home/opc/default-rules.json
+chmod 600 /home/opc/deny-all-rules.json
+```
+
+###### Monitoring script with OCI SDK
 ```
 sudo nano /usr/local/bin/log-size-monitor.sh
 ```
 ```
 #!/bin/bash
 
-# Configuration
-MAX_SIZE_MB=500
-MAX_SIZE_BYTES=$((MAX_SIZE_MB * 1024 * 1024))
-ALERT_FILE="/var/log/log-size-alert"
-LOCKFILE="/var/run/network-blocked.lock"
+# usage: ./log-size-monitor.sh <default-rules.json> <deny-rules.json>
 
-# OCI Configuration
-SECURITY_LIST_OCID="ocid1.securitylist.oc1...." # YOUR SECURITY LIST OCID HERE
-BACKUP_RULES_FILE="/var/log/oci-original-rules.json"
+set -euo pipefail
 
-# Array of log files to monitor
-LOG_FILES=(
+# ============================================================================
+# VALIDATE ARGUMENTS
+# ============================================================================
+
+if [[ $# -ne 2 ]]; then
+    echo "Usage: $0 <default-rules.json> <deny-rules.json>" >&2
+    exit 1
+fi
+
+readonly DEFAULT_RULES="$1"
+readonly DENY_RULES="$2"
+
+# validate rule files exist and are readable
+if [[ ! -r "$DEFAULT_RULES" ]]; then
+    echo "ERROR: Cannot read default rules file: $DEFAULT_RULES" >&2
+    exit 1
+fi
+
+if [[ ! -r "$DENY_RULES" ]]; then
+    echo "ERROR: Cannot read deny rules file: $DENY_RULES" >&2
+    exit 1
+fi
+
+# ============================================================================
+# CONFIGURATION
+# ============================================================================
+
+# maximum total size in MB before triggering lockdown
+readonly MAX_SIZE_MB=500
+
+# directories to monitor (sizes accumulate to total)
+readonly WATCH_DIRS=(
     "/var/log/secure"
-    # "/var/log/suricata/eve.json"
-    # "/var/log/httpd/access_log"
+
+    # add more directories here as needed:
+    # "/var/log/httpd"
+    # "/var/log/mysql"
 )
 
-# Calculate total size
-TOTAL_SIZE=0
-for LOG_FILE in "${LOG_FILES[@]}"; do
-    if [ -f "$LOG_FILE" ]; then
-        FILE_SIZE=$(stat -c%s "$LOG_FILE" 2>/dev/null)
-        TOTAL_SIZE=$((TOTAL_SIZE + FILE_SIZE))
-    fi
-done
+# OCI Security List OCID (from environment variable)
+if [[ -z "${SECURITY_LIST_OCID:-}" ]]; then
+    echo "ERROR: SECURITY_LIST_OCID environment variable not set" >&2
+    exit 1
+fi
 
-TOTAL_SIZE_MB=$((TOTAL_SIZE / 1024 / 1024))
+readonly SECURITY_LIST_OCID
 
-# Check if currently blocked
-if [ -f "$LOCKFILE" ]; then
-    # We're blocked - check if we can restore
-    if [ "$TOTAL_SIZE" -lt "$MAX_SIZE_BYTES" ]; then
-        echo "$(date): Log size back to normal (${TOTAL_SIZE_MB}MB), restoring network..." >> "$ALERT_FILE"
-        
-        # Restore original ingress rules from backup
-        if [ -f "$BACKUP_RULES_FILE" ]; then
-            ORIGINAL_RULES=$(cat "$BACKUP_RULES_FILE")
-            
-            oci network security-list update \
-              --security-list-id "$SECURITY_LIST_OCID" \
-              --ingress-security-rules "$ORIGINAL_RULES" \
-              --force >> "$ALERT_FILE" 2>&1
-            
-            if [ $? -eq 0 ]; then
-                rm -f "$LOCKFILE"
-                rm -f "$BACKUP_RULES_FILE"
-                echo "$(date): Network restored via OCI" >> "$ALERT_FILE"
-            else
-                echo "$(date): ERROR: Failed to restore network rules" >> "$ALERT_FILE"
-            fi
-        else
-            echo "$(date): ERROR: Backup rules file not found" >> "$ALERT_FILE"
-        fi
-    fi
-else
-    # Not blocked - check if we should block
-    if [ "$TOTAL_SIZE" -ge "$MAX_SIZE_BYTES" ]; then
-        echo "$(date): Combined log size exceeded ${MAX_SIZE_MB}MB (current: ${TOTAL_SIZE_MB}MB)" >> "$ALERT_FILE"
-        
-        # List individual file sizes
-        echo "$(date): Individual file sizes:" >> "$ALERT_FILE"
-        for LOG_FILE in "${LOG_FILES[@]}"; do
-            if [ -f "$LOG_FILE" ]; then
-                SIZE=$(stat -c%s "$LOG_FILE" 2>/dev/null)
-                SIZE_MB=$((SIZE / 1024 / 1024))
-                echo "  $LOG_FILE: ${SIZE_MB}MB" >> "$ALERT_FILE"
+# state file to track current firewall mode
+# values: "default" or "deny"
+readonly STATE_FILE="/home/opc/.oci-monitor-state"
+
+# ============================================================================
+# FUNCTIONS
+# ============================================================================
+
+# calculate total size of all watched directories in MB
+get_total_size_mb() {
+    local total_bytes=0
+    local file
+    
+    for pattern in "${WATCH_DIRS[@]}"; do
+        for file in $pattern; do
+            if [[ -f "$file" ]]; then
+                total_bytes=$((total_bytes + $(stat -c%s "$file" 2>/dev/null || echo 0)))
             fi
         done
-        
-        # Backup current ingress rules
-        oci network security-list get \
-          --security-list-id "$SECURITY_LIST_OCID" \
-          --query 'data."ingress-security-rules"' \
-          > "$BACKUP_RULES_FILE" 2>> "$ALERT_FILE"
-        
-        # Block all ingress traffic (except Tailscale if you want to keep access)
-        # Option A: Block everything
-        BLOCK_RULES='[{"source":"0.0.0.0/0","protocol":"all","isStateless":true,"description":"AUTO-BLOCK: Log limit exceeded"}]'
-        
-        # Option B: Block everything except Tailscale (recommended)
-        # BLOCK_RULES='[{"source":"0.0.0.0/0","protocol":"all","isStateless":true,"tcpOptions":null,"udpOptions":null,"description":"AUTO-BLOCK"},{"source":"0.0.0.0/0","protocol":"17","isStateless":false,"udpOptions":{"destinationPortRange":{"min":41641,"max":41641}},"description":"Keep Tailscale"}]'
-        
-        oci network security-list update \
-          --security-list-id "$SECURITY_LIST_OCID" \
-          --ingress-security-rules "$BLOCK_RULES" \
-          --force >> "$ALERT_FILE" 2>&1
-        
-        if [ $? -eq 0 ]; then
-            touch "$LOCKFILE"
-            echo "$(date): Emergency network block activated via OCI" >> "$ALERT_FILE"
+    done
+    
+    echo $((total_bytes / 1024 / 1024))
+}
+
+# get current firewall state
+get_current_state() {
+    if [[ -f "$STATE_FILE" ]]; then
+        cat "$STATE_FILE"
+    else
+        echo "unknown"
+    fi
+}
+
+# set firewall state
+set_state() {
+    local new_state="$1"
+    echo "$new_state" > "$STATE_FILE"
+    chmod 600 "$STATE_FILE"
+}
+
+# apply security rules
+apply_rules() {
+    local rules_file="$1"
+    local description="$2"
+
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Applying $description..."
+    
+    if oci network security-list update \
+        --security-list-id "$SECURITY_LIST_OCID" \
+        --ingress-security-rules file://"$rules_file" \
+        --force \
+        --wait-for-state AVAILABLE \
+        2>&1 | grep -v "WARNING"; then
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] Successfully applied $description"
+        return 0
+    else
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] ERROR: Failed to apply $description" >&2
+        return 1
+    fi
+}
+
+# ============================================================================
+# MAIN LOGIC
+# ============================================================================
+
+main() {
+    # calculate total size of watched directories
+    local total_size_mb
+    total_size_mb=$(get_total_size_mb)
+
+    # get current state
+    local current_state
+    current_state=$(get_current_state)
+
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Total log size: ${total_size_mb}MB / ${MAX_SIZE_MB}MB"
+
+    # determine if I need to change rules
+    if [[ $total_size_mb -ge $MAX_SIZE_MB ]]; then
+        # size exceeded - lock down
+        if [[ "$current_state" != "deny" ]]; then
+            echo "[$(date '+%Y-%m-%d %H:%M:%S')] WARNING: Log size limit exceeded! Enabling lockdown mode..."
+            if apply_rules "$DENY_RULES" "deny-all rules"; then
+                set_state "deny"
+            fi
         else
-            echo "$(date): ERROR: Failed to apply network block" >> "$ALERT_FILE"
+            echo "[$(date '+%Y-%m-%d %H:%M:%S')] Already in lockdown mode"
+        fi
+    else
+        # size OK - restore normal access
+        if [[ "$current_state" != "default" ]]; then
+            echo "[$(date '+%Y-%m-%d %H:%M:%S')] Log size back to normal. Restoring default rules..."
+            if apply_rules "$DEFAULT_RULES" "default rules"; then
+                set_state "default"
+            fi
+        else
+            echo "[$(date '+%Y-%m-%d %H:%M:%S')] Normal operation - no action needed"
         fi
     fi
-fi
-```
+}
 
+# run main function
+main
 ```
-# make executable
+###### make executable
+```
 sudo chmod +x /usr/local/bin/log-size-monitor.sh
 ```
-
-The script runs as root via cron, so root needs access to OCI CLI config:
+###### For testing manually:
 ```
-# If you configured OCI CLI as opc user
-sudo mkdir -p /root/.oci
-sudo cp ~/.oci/config /root/.oci/
-sudo cp ~/.oci/oci_api_key.pem /root/.oci/
-sudo chmod 600 /root/.oci/config /root/.oci/oci_api_key.pem
+/usr/local/bin/log-size-monitor.sh /home/opc/default-rules.json /home/opc/deny-all-rules.json
 ```
-
-Let's test it
+###### Setup cron job to run every 1 minute
 ```
-# Test OCI CLI works as root
-sudo oci network security-list get --security-list-id <your-ocid>
-
-# Test the script manually
-sudo /usr/local/bin/log-size-monitor.sh
-
-# Check for errors
-cat /var/log/log-size-alert
-```
-Add to cronjob that watches the log file(s) every 1 minute
-
-```
-sudo crontab -e
-* * * * * /usr/local/bin/log-size-monitor.sh
+crontab -e
+* * * * * /usr/local/bin/log-size-monitor.sh /home/opc/default-rules.json /home/opc/deny-all-rules.json >> /home/opc/log-monitor.log 2>&1
 ```
 
-The cronjob should now handle automatic network restoration after every daily archive.
+###### For monitoring 
+```
+# Watch the monitor log in real-time
+tail -f ~/log-monitor.log
 
-## Automated Log Data Pusher From Lab To Jumpserver With Pruning
+# Check current state
+cat ~/.oci-monitor-state
+```
+
+How it works:
+* Every Minute, cron runs the monitor script 
+* Script checks total size of watched directories
+* If combined size \>= 500MB, apply deny-all rules
+* If combined size \< 500MB, apply default rules
+* Watched directories should have daily archving enabled
+* State tracking prevents unnecessary API calls
+
+<Callout>
+To add more directories to monitor, add them to the WATCH_DIRS array in the script:
+
+```
+readonly WATCH_DIRS=(
+    "/var/log/secure"
+    "/var/log/httpd"
+    "/var/log/mysql"
+)
+```
+Then configure the required ports in the NSG rules in the OCI console.
+
+Then update the DEFAULT_RULES and DENY_RULES json files to match the new watched directories.
+</Callout>
+
+Then finally, setup archiving for the log-monitor (cronjob activity logs) because it will grow indefinitely without it.
+```
+sudo nano /etc/logrotate.d/log-monitor
+
+/home/opc/log-monitor.log
+{
+    daily
+    rotate 7
+    missingok
+    notifempty
+    compress
+    delaycompress
+    create 644 opc opc
+}
+```
+
+## Pulling Logs From Lab To Jump Server
+
+###### Create a log staging directory on jump server
+```
+sudo mkdir -p /opt/splunk-logs/lab-secure
+sudo chown opc:opc /opt/splunk-logs/lab-secure
+chmod 700 /opt/splunk-logs/lab-secure
+```
+
+###### Create a rsync script on jump server
+Maximum theoretical storage usage in a rolling 30 day window is 500MB per day * 30 days = 15GB.
+
+For simplicity, I will use cronjob to prune data older than 30 days. 
+I would just need to manually pull from jump server to splunk server once a month.
+
+I will first add this to ssh config so I can use tailscale with rsync.
+```
+nano ~/.ssh/config
+Host lab1
+    ProxyCommand /usr/bin/tailscale nc %h %p
+    User opc
+```
+
+Create the config json file.
+```
+nano /home/opc/pull-logs-config.json
+{
+  "lab_server": "lab1",
+  "source_dirs": [
+    "/var/log/secure*"
+  ],
+  "dest_dir": "/opt/splunk-logs/lab-secure"
+}
+```
+
+###### Create pull script on jump server
+```
+sudo nano /usr/local/bin/pull-logs.sh
+
+#!/bin/bash
+set -euo pipefail
+
+CONFIG_FILE="${1:-/home/opc/pull-logs-config.json}"
+LOG_FILE="/home/opc/log-puller.log"
+
+# Read config
+LAB_SERVER=$(jq -r '.lab_server' "$CONFIG_FILE")
+DEST_DIR=$(jq -r '.dest_dir' "$CONFIG_FILE")
+
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] Pulling logs from $LAB_SERVER..." | tee -a "$LOG_FILE"
+
+# Create dest if needed
+mkdir -p "$DEST_DIR"
+
+# Pull each source directory with sudo rsync
+while read -r source; do
+    rsync -az --rsync-path="sudo rsync" "${LAB_SERVER}:${source}" "${DEST_DIR}/" 2>&1 | tee -a "$LOG_FILE"
+done < <(jq -r '.source_dirs[]' "$CONFIG_FILE")
+
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] Pull complete" | tee -a "$LOG_FILE"
+```
+
+###### Make it executable
+```
+sudo chmod +x /usr/local/bin/pull-logs.sh
+```
+
+###### Setup cronjob to run every 15 minutes
+```
+crontab -e
+
+# pull logs from lab every 15 minutes
+*/15 * * * * /usr/local/bin/pull-logs.sh >> /home/opc/log-puller.log 2>&1
+
+# delete logs older than 30 days 
+0 2 * * * find /opt/splunk-logs/lab-secure -type f -name "secure*" -mtime +30 -delete
+
+```
+
+###### Setup logrotate for pull script logs (cronjob activity log)
+```
+sudo nano /etc/logrotate.d/log-puller
+
+/home/opc/log-puller.log {
+    daily
+    rotate 7
+    missingok
+    notifempty
+    compress
+    delaycompress
+    create 644 opc opc
+}
+```
+###### For monitoring
+```
+# watch pull activity
+tail -f ~/log-puller.log
+
+# check storage usage
+du -sh /opt/splunk-logs/lab-secure/
+```
+
+
+###### Check the rsynced log files
+```
+ls -lah /opt/splunk-logs/lab-secure/
+
+```
+
+
 
 ## Splunk Universal Forwarder From Jumpserver To Splunk
 
