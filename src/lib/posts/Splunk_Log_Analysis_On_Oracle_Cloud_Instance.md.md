@@ -119,8 +119,6 @@ sudo nano /etc/logrotate.d/secure-daily
     rotate 30
     missingok
     notifempty
-    compress
-    delaycompress
     dateext
     sharedscripts
     postrotate
