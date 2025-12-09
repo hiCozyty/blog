@@ -76,7 +76,7 @@ While my [personal homelab](https://github.com/hiCozyty/homelab) is still a work
 For these reasons, I decided to offload the lab environment to the cloud. Both AWS and Oracle Cloud Infrastructure (OCI) offer free-tier options. Since I already use AWS for other projects, I opted for OCI for this lab, keeping Azure reserved for future Windows-focused experiments. 
 
 ## Planned Topology
-![topology](/static/blogImages/blog1/oracle_lab.jpg)
+![topology](/blogImages/blog1/oracle_lab.jpg)
 *created with draw.io*
 
 ## Technologies Being leveraged
@@ -156,7 +156,7 @@ The endgoal for me is to produce a minimum viable lab with secure logging attach
 For this project, I'm using my non-personal tailscale account designated for lab usage only.
 
 Below is the ACL I set up:
-![acl](/static/blogImages/blog1/acl.jpg)
+![acl](/blogImages/blog1/acl.jpg)
 
 ```
 python3 -m http.server 8000
@@ -164,7 +164,7 @@ python3 -m http.server 8000
 For quick sanity check, I spun up a python http server from splunk machine then tried to `wget` and the attempt failed as expected. This confirms the ACL isolation is working.
 
 Since I'm automating the communication between the jump server and the lab, I don't want the tailscale sessions on either machines to expire. So I disabled the key expiry for both jump server and lab in the dashboard.
-![key](/static/blogImages/blog1/tailscale_key_expire.png)
+![key](/blogImages/blog1/tailscale_key_expire.png)
 
 ## Oracle Cloud Initial Configuration
 Let's look at the official tailscale [documentation](https://tailscale.com/kb/1149/cloud-oracle) for accessing Oracle Cloud VMs privately using tailscale.
@@ -1000,7 +1000,7 @@ source="/opt/splunk-logs/lab-secure/secure*" sourcetype=linux_secure
 </Callout>
 
 Then I clicked on visualization tab and selected __Pie Chart__.
-![splunk1](/static/blogImages/blog1/splunk1.png)
+![splunk1](/blogImages/blog1/splunk1.png)
 
 
 ###### IP Origin & Geographic Location
@@ -1017,8 +1017,8 @@ source="/opt/splunk-logs/lab-secure/secure" sourcetype=linux_secure
 * `| geostats count by City`: This prepares the data specifically for the `Cluster Map` visualization. 
 
 Then I clicked on visualization tab and selected __Cluster Map__.
-![splunk2](/static/blogImages/blog1/splunk2.png)
-![splunk3](/static/blogImages/blog1/splunk3.png)
+![splunk2](/blogImages/blog1/splunk2.png)
+![splunk3](/blogImages/blog1/splunk3.png)
 
 
 ###### Daily Occurence rate
@@ -1029,7 +1029,7 @@ source="/opt/splunk-logs/lab-secure/secure" sourcetype=linux_secure
 | stats count by _time
 ```
 Then I clicked on visualization tab and selected __Area Chart__.
-![splunk4](/static/blogImages/blog1/splunk4.png)
+![splunk4](/blogImages/blog1/splunk4.png)
 
 ## Conclusion
 In this blog post, I leveraged the OCI free tier, tailscale, and splunk to create a secure, log centric penetration testing environment. By implementing an automated log size monitoring script using `OCI CLI`, I am easily managing 500MB/day Splunk free tier ingestion limit.
