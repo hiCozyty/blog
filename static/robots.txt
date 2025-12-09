@@ -1,0 +1,25 @@
+User-agent: *
+Allow: /
+Allow: /about
+Allow: /contact
+Allow: /blog/
+Disallow: /*
+
+
+# ----------------------------
+# BLOCK AI BOTS
+# ----------------------------
+User-agent: GPTBot
+Disallow: /
+
+User-agent: Anthropic
+Disallow: /
+
+User-agent: CCBot
+Disallow: /
+
+User-agent: OpenAI
+Disallow: /
+
+User-agent: Google-Extended
+Disallow: /
