@@ -10,16 +10,25 @@
 <svelte:head>
 	<!-- Be sure to add your image files and un-comment the lines below -->
 	<title>{title}</title>
-	<meta data-key="description" name="description" content={excerpt} />
+	<meta name="description" content={excerpt} />
 	<meta property="og:type" content="article" />
+
 	<meta property="og:title" content={title} />
 	<meta name="twitter:title" content={title} />
+
 	<meta property="og:description" content={excerpt} />
 	<meta name="twitter:description" content={excerpt} />
-	<!-- <meta property="og:image" content="https://yourdomain.com/image_path" /> -->
+
+	<!-- THIS IS THE IMPORTANT PART -->
+	<meta property="og:image" content={data.meta.image} />
+	<meta name="twitter:image" content={data.meta.image} />
+
 	<meta property="og:image:width" content={coverWidth} />
 	<meta property="og:image:height" content={coverHeight} />
-	<!-- <meta name="twitter:image" content="https://yourdomain.com/image_path" /> -->
+
+	<meta name="robots" content="noai, noimageai" />
+	<meta name="ai-models" content="noindex, nofollow, noarchive" />
+	<meta http-equiv="X-Robots-Tag" content="noai, noindex, noarchive" />
 </svelte:head>
 
 <article class="post">
@@ -62,12 +71,12 @@
 </article>
 
 <style>
-    .post-footer__categories a {
-        border-radius: 25px; /* Adjust this value - higher = rounder */
-    }
-    
-    /* Or target more specifically if needed */
-    .post-footer__categories li a {
-        border-radius: 25px;
-    }
+	.post-footer__categories a {
+		border-radius: 25px; /* Adjust this value - higher = rounder */
+	}
+
+	/* Or target more specifically if needed */
+	.post-footer__categories li a {
+		border-radius: 25px;
+	}
 </style>

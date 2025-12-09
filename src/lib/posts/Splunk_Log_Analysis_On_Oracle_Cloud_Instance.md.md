@@ -1,13 +1,13 @@
 ---
-title: "Splunk Setup On Oracle Cloud Instance"
+title: "Splunk Log Analysis On Oracle Cloud Instance"
 date: "2025-11-25"
-updated: "2025-11-25"
+updated: "2025-12-09"
 categories:
   - "cloud"
   - "oracle"
   - "lab"
   - "beginner"
-coverImage: "/blogImages/blog1/Oracle-Cloud-Logo.png"
+coverImage: "/blogImages/blog1/oracle_blog.png"
 coverWidth: 8
 coverHeight: 4
 excerpt: November 25, 2025
@@ -15,14 +15,9 @@ excerpt: November 25, 2025
 
 <script>
 	import Callout from '$lib/components/Callout.svelte';
+  import BackToTop from '$lib/components/BackToTop.svelte';
 </script>
-
-*"You realize that you can just do things right? Like you can just do them. Just do things"* 
-
-Me:
-![ok](/static/blogImages/blog1/saitama_ok.jpg)
-
-Since I don't know anything about Oracle and Splunk. let's learn and create a project around them. Let's do it. 
+<BackToTop />
 
 ## Table of Contents
 
@@ -32,7 +27,7 @@ Since I don't know anything about Oracle and Splunk. let's learn and create a pr
 * [Technologies Being leveraged](#technologies-being-leveraged)
 * [Why OCI for Lab Experiments?](#why-oci-for-lab-experiments)
 * [Splunk overview](#splunk-overview)
-* [rsyslog and rsync](#rsyslog-and-rsync)
+* [rsyslog, rsync, and logrotate](#rsyslog-rsync-and-logrotate)
 * [Tailscale overview](#tailscale-overview)
 * [__Objectives Of This Project__](#objectives-of-this-project)
 
@@ -44,19 +39,19 @@ Since I don't know anything about Oracle and Splunk. let's learn and create a pr
 * [Configuring OCI CLI](#configuring-oci-cli)
   * [Configure OCI CLI with credentials](#configure-oci-cli-with-credentials)
   * [Test out the API authentication](#test-out-the-api-authentication)
-* [Playing Around With Oracle Cloud](#playing-around-with-oracle-cloud)
+* [Playing Around With the OCI SDK](#playing-around-with-the-oci-sdk)
 * [Creating A Cronjob Log Size Watcher](#creating-a-cronjob-log-size-watcher)
   * [Creating statically assigned ingress json rule files](#creating-statically-assigned-ingress-json-rule-files)
   * [Monitoring script with OCI SDK](#monitoring-script-with-oci-sdk)
 * [Pulling Logs From Lab To Jump Server](#pulling-logs-from-lab-to-jump-server)
   * [Create a log staging directory on the jump server](#create-a-log-staging-directory-on-the-jump-server)
-  * [Create an rsync script on jump server](#create-an-rsync-script-on-jump-server)
+  * [Create an rsync script on the jump server](#create-an-rsync-script-on-the-jump-server)
   * [Create the config json file](#create-the-config-json-file)
   * [Create pull script on jump server](#create-pull-script-on-jump-server)
   * [Setup cronjob to run every 15 minutes](#setup-cronjob-to-run-every-15-minutes)
   * [Setup logrotate for pull script logs (cronjob activity log)](#setup-logrotate-for-pull-script-logs-cronjob-activity-log)
 
-* [Splunk Universal Forwarder Setup From Jump Server To Splunk Machine](#splunk-universal-forwarder-setup-from-jump-server-to-splunk-machine)
+* [Splunk Universal Forwarder Setup From Jump Server To Splunk Indexer](#splunk-universal-forwarder-setup-from-jump-server-to-splunk-indexer)
   * [Download Splunk Universal Forwarder on the jump server](#download-splunk-universal-forwarder-on-the-jump-server)
   * [Install the RPM package](#install-the-rpm-package)
   * [Start the Universal Forwarder](#start-the-universal-forwarder)
@@ -65,21 +60,31 @@ Since I don't know anything about Oracle and Splunk. let's learn and create a pr
   * [Configure input monitoring settings](#configure-input-monitoring-settings)
   * [Install acl and set proper permission to read logs](#install-acl-and-set-proper-permission-to-read-logs)
   * [Restart the forwarder](#restart-the-forwarder)
-* [Windows Splunk Client Settings](#windows-splunk-client-settings)
+* [Rocky Linux Splunk Indexer Settings](#rocky-linux-splunk-indexer-settings)
+  * [Enable Receiving data on 9997 port from Splunk Web UI](#enable-receiving-data-on-9997-port-from-splunk-web-ui)
+  * [Allow inbound traffic on tailscale subnet port 9997](#allow-inbound-traffic-on-tailscale-subnet-port-9997)
+  * [Test with `nc` from jump server to splunk client machine on port 9997](#test-with-nc-from-jump-server-to-splunk-client-machine-on-port-9997)
+  
+###### Log Results
+* [Top 10 Users Attempting ssh Access](#top-10-users-attempting-ssh-access)
+* [IP Origin & Geographic Location](#ip-origin-geographic-location)
+* [Daily Occurence rate](#daily-occurence-rate)
 
-### Offloading Labs to the Cloud: A Practical Decision
-While my [personal homelab](https://github.com/hiCozyty/homelab) is still a work in progress, I'm not confident in its network security setup is mature enough to safely host intentionally vulnerable machines. Even though my lab VLAN is DMZ isolated I want to avoid the risk of exposing my trusted devices to potential compromise.
+## Offloading Labs to the Cloud: A Practical Decision
+While my [personal homelab](https://github.com/hiCozyty/homelab) is still a work in progress, I'm not confident in its network security setup to safely host intentionally vulnerable machines. Even though my lab VLAN is DMZ isolated, I want to avoid the risk of exposing my trusted devices to potential compromise.
 
-For these reasons, I decided to offload the lab environment to the cloud. Both AWS and Oracle Cloud Infrastructure (OCI) offer free-tier options. Since I already use AWS for other projects, I opted for OCI for this lab, keeping Azure reserved for future Windows-focused experiments. Cloud-based labs allow me to experiment with potentially vulnerable machines in a controlled and isolated environment, while leveraging scalable infrastructure and free-tier resources.
+For these reasons, I decided to offload the lab environment to the cloud. Both AWS and Oracle Cloud Infrastructure (OCI) offer free-tier options. Since I already use AWS for other projects, I opted for OCI for this lab, keeping Azure reserved for future Windows-focused experiments. 
 
 ## Planned Topology
 ![topology](/static/blogImages/blog1/oracle_lab.jpg)
 *created with draw.io*
+
 ## Technologies Being leveraged
 
 * Oracle Cloud Instances (running AlmaLinux for both)
 * Splunk / Splunk universal forwarder
 * rsyslog
+* logrotate
 * rsync
 * tailscale ACL
 
@@ -106,7 +111,7 @@ I will be using Splunk Universal Forwarder on the jump server to forward logs fr
 
 When considering the data ingestion limit of splunk free tier at 500MB/day and OCI log storage limit of 10GB/month, OCI log storage is the bottleneck here. 
 
-To maximize the theoretical log output for analysis, I will be opting out of the OCI ecosystem and handle the log storage on my own using `rsync` and `rsyslog`.
+To maximize the theoretical log output for analysis, I will be opting out of the OCI ecosystem and handle the log storage on my own using `rsync`, `rsyslog`, and `logrotate`.
 
 How the Universal Forwarder works:
 * Reads log files line by line
@@ -116,12 +121,16 @@ How the Universal Forwarder works:
 * Port 9997 is used for receiving logs
 * The forwarder sends the data over a random source port, but the indexer receives logs on port 9997
 
-## rsyslog and rsync
-`rsyslog` is a log processing system available on most linux distributions. It's the default system logger for __AlmaLinux__, which is the distribution I will be using for both lab and jump server. 
+## rsyslog, rsync, and logrotate
+`rsyslog` is a log processing system available on most linux distributions. It's the default system logger for __AlmaLinux__, which is the distribution I will be using for both lab and jump server.
+
+It listens for security-related events (like SSH attempts) from the Linux kernel and programs, then writes those events to the live log file: `/var/log/secure`.
 
 `rsync` is a file transfer program that can be used to transfer files between two machines. 
 
-Leveraging both wil allow me to automate forwarding logs from the lab to jump server.
+`logrotate` is a utility that manages log files. It is a standalone utility that runs periodically (usually daily/weekly via a cron job). Its job is to archive the live /var/log/secure file (e.g., compress it to secure-YYYYMMDD.gz) and then tell rsyslog to start writing to a fresh, empty `/var/log/secure` file
+
+Leveraging these wil allow me to automate forwarding logs from the lab to jump server.
 
 ## Tailscale overview
 Tailscale is a zero-config VPN built on wireguard that creates a secure connection between devices. Tailscale's built in ACL system allows me to define granular rules that restrict which devices can communicate with each other. This is crucial for practicing defense in depth for this project. Even if the lab VM is compromised, attacker can't pivot to other devices without valid ACL permissions.
@@ -138,13 +147,13 @@ The endgoal for me is to produce a minimum viable lab with secure logging attach
 
 * The jump server (~50GB storage), which I will be using to access the lab VM, will also serve as a data storage server with automatic pruning to manage disk space.
 
-* I need to deploy the Splunk Universal Forwarder on the jump server to forward logs automatically to the trusted device. This program allows for batched forwarding and doesn't require the trusted machine to be on all day.
+* I need to deploy the Splunk Universal Forwarder on the jump server to forward logs automatically to the trusted device (Splunk Indexer). This program allows for batched forwarding and doesn't require the trusted machine to be on all day.
 
-* For this starter project, I will focus only on `/var/log/secure`, which hold ssh related logs. The subsequent projects will try to get other logs from sources such as intrusion detection systems, databases, web servers, etc.
+* For this starter project, I will focus only on `/var/log/secure`, which hold ssh related logs. Subsequent projects will focus on integrating logs from other sources, such as intrusion detection systems, databases, and web servers.
 
 
 ## Tailscale
-For this project, I'm using my throwaway account.
+For this project, I'm using my non-personal tailscale account designated for lab usage only.
 
 Below is the ACL I set up:
 ![acl](/static/blogImages/blog1/acl.jpg)
@@ -152,14 +161,14 @@ Below is the ACL I set up:
 ```
 python3 -m http.server 8000
 ```
-For quick sanity check, I spun up a python http server from splunk machine then tried to `wget` from either the jump server or the lab. It didn't work. That means, ACL is working. 
+For quick sanity check, I spun up a python http server from splunk machine then tried to `wget` and the attempt failed as expected. This confirms the ACL isolation is working.
 
 Since I'm automating the communication between the jump server and the lab, I don't want the tailscale sessions on either machines to expire. So I disabled the key expiry for both jump server and lab in the dashboard.
 ![key](/static/blogImages/blog1/tailscale_key_expire.png)
 
 ## Oracle Cloud Initial Configuration
 Let's look at the official tailscale [documentation](https://tailscale.com/kb/1149/cloud-oracle) for accessing Oracle Cloud VMs privately using tailscale.
-I setup the ingress rules in the security group in the OCI console to allow `UDP port 41641`. I removed the TCP port 22 from the egress rules for jump server because I can just use tailscale ssh. I left the TCP port 22 egress rule  for lab because that is the main focus for logging for this project.
+I setup the ingress rules in the security group in the OCI console to allow `UDP port 41641`. I removed the TCP port 22 from the egress rules for jump server because I can just use tailscale ssh. I left alone the TCP port 22 egress rule for lab because that is the main focus for logging for this project.
 
 I then ran these commands in both jump server and lab:
 ```
@@ -168,15 +177,16 @@ tailscale set --ssh --advertise-routes=10.0.0.0/24,169.254.169.254/32 --accept-d
 
 I then added Oracle DNS nameserver in the tailscale dashboard and approve the subnets.
 
-Following principles of least privilege, I will set the lab's egress rule to be restrictive to only allow certain ports needed for basic tailscale outbound communication. I will focus more on parsing initial point of contact logs. 
+Following principles of least privilege, I had set up the lab's egress rule to be restrictive to only allow certain ports needed for basic tailscale outbound communication. I will focus more on parsing initial point of contact logs. 
 
 ###### Minimum working lab egress rule
 * stateless = No
 * sourcePort = ALL 
-* destPort = 41641(UDP), 3478(UDP), 53(UDP), 443(TCP), 80(TCP)
+* destPort = 3478(UDP), 53(UDP), 443(TCP), 80(TCP)
 
-Post-compromise activity is cool and interesting, but I believe they are for more out of scope topics like threat intelligence and incident response.
+* `sudo tailscale set --force-derp`
 
+While post-compromise activity, which requires unfiltered egress rules to better simulate victim environment, is cool and interesting, I believe logs related to incidence response are for more out of scope for this project.
 
 ## Update Rotation Schedule for SSH Logs:
 Almalinux default rsyslog archive rate is every 7 days with a retention policy of 30 days. The plan is to change the archive rate for `/var/log/secure` to daily so I can properly monitor the daily log size to be under the 500MB limit.
@@ -197,12 +207,12 @@ sudo nano /etc/logrotate.d/secure-daily
     endscript
 }
 ```
-Check for syntax errors
+To check for syntax errors, I ran the below command:
 ```
 sudo logrotate -d /etc/logrotate.d/secure-daily
 ```
 
-Force a rotation to test (actually rotates the file)
+To force a rotation to test (actually rotates the file), I ran the below command:
 ```
 sudo logrotate -f /etc/logrotate.d/secure-daily
 
@@ -211,7 +221,7 @@ ls -lh /var/log/secure*
 ```
 
 ## Configuring OCI CLI
-[OCI CLI](https://github.com/oracle/oci-cli) provides a CLI tool SDK wrapper for managing ingress and egress rules directly from the machine. I will leverage this tool to create a watcher program that monitors the size of the log directory of interests (`/var/log/secure` for now) and automatically deny all network ingress traffic if the log size exceeds the daily threshold of 500MB. 
+[OCI CLI](https://github.com/oracle/oci-cli) provides a CLI tool SDK wrapper for managing ingress and egress rules directly from the machine. I will leverage this tool to create a watcher program that monitors the size of the log directory of interests (`/var/log/secure` for now) and automatically deny all network ingress traffic if the total log size exceeds the daily threshold of 500MB. 
 
 
 ###### Configure OCI CLI with credentials
@@ -240,12 +250,13 @@ Enter a name for your key [oci_api_key]: oci_api_key
 ```
 
 ###### Test out the API authentication
+I ran this command to test out basic API authentication
 ```
 oci iam availability-domain list
 ```
 
 ## Playing Around With the OCI SDK
-First, I added environmental variable for securitylist OCID value SECURITY_LIST_OCID. This value can be found in the console. 
+First, I added environmental variable for securitylist OCID value SECURITY_LIST_OCID. This value can be found in the console. Adding it into the `/etc/environment` is needed because cronjob won't be able to access environmental variables set inside `.zshrc`.
 ```
 sudo nano /etc/environment
 # add this line
@@ -294,12 +305,12 @@ After I verified that it works, I restored the original ingress rules and tried 
 ```
 oci network security-list update --security-list-id "$SECURITY_LIST_OCID" --ingress-security-rules "$(cat current.json)"
 ```
-It didn't work. Great.
+It didn't work as expected. Great.
 
 ## Creating A Cronjob Log Size Watcher
 
 ###### Creating statically assigned ingress json rule files: 
-I first created a `default-rules.json` and `deny-rules.json` ingress rules file.
+I first created a `default-rules.json` and `deny-rules.json` ingress rules file for a simpler script. I can simply add these values as script arguments.
 ```
 nano /home/opc/default-rules.json
 [
@@ -417,8 +428,14 @@ chmod 600 /home/opc/deny-all-rules.json
 ```
 
 ###### Monitoring script with OCI SDK
-Since I updated the data archive rate to daily earlier, once the log size resets, the script should be written in a way that the reccuring cronjob calls for this script should automatically restore the ingress rules to `default-rules.json` to allow traffic again. 
+The data archive rate was set to daily earlier. Once the log size resets on a daily basis, the monitoring script should automatically restore the ingress rules to `default-rules.json` to allow traffic again if it wasn't set to default rules already.
 
+This is the basic usage:
+```
+$ ./log-size-monitor.sh <default-rules.json> <deny-rules.json>
+```
+
+I created the script in this directory:
 ```
 sudo nano /usr/local/bin/log-size-monitor.sh
 ```
@@ -528,7 +545,7 @@ apply_rules() {
         --ingress-security-rules file://"$rules_file" \
         --force \
         --wait-for-state AVAILABLE \
-        2>&1 | grep -v "WARNING"; then
+        2>&1 | grep -v "WARNING: Updates to defined-tags and egress-security-rules and freeform-tags and ingress-security-rules will replace any existing values."; then
         echo "[$(date '+%Y-%m-%d %H:%M:%S')] Successfully applied $description"
         return 0
     else
@@ -579,21 +596,21 @@ main() {
 # run main function
 main
 ```
-Make executable
+And made it executable.
 ```
 sudo chmod +x /usr/local/bin/log-size-monitor.sh
 ```
-For testing manually:
+Then for testing manually, I ran this:
 ```
 /usr/local/bin/log-size-monitor.sh /home/opc/default-rules.json /home/opc/deny-all-rules.json
 ```
-Setup cron job to run every 1 minute
+Then I setup cronjob to run every 1 minute.
 ```
 crontab -e
 * * * * * /usr/local/bin/log-size-monitor.sh /home/opc/default-rules.json /home/opc/deny-all-rules.json >> /home/opc/log-monitor.log 2>&1
 ```
 
-For monitoring 
+For monitoring:
 ```
 # Watch the monitor log in real-time
 tail -f ~/log-monitor.log
@@ -611,6 +628,8 @@ How it works:
 * State is tracked to prevent unnecessary API calls
 
 <Callout>
+Note:
+
 To add more directories to monitor, add them to the WATCH_DIRS array in the script:
 
 ```
@@ -704,7 +723,7 @@ done < <(jq -r '.source_dirs[]' "$CONFIG_FILE")
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] Pull complete" | tee -a "$LOG_FILE"
 ```
 
-Make it executable
+I made it executable.
 ```
 sudo chmod +x /usr/local/bin/pull-logs.sh
 ```
@@ -742,7 +761,7 @@ sudo nano /etc/logrotate.d/log-puller
     create 644 opc opc
 }
 ```
-For monitoring
+For monitoring:
 ```
 # watch pull activity
 tail -f ~/log-puller.log
@@ -752,19 +771,20 @@ du -sh /opt/splunk-logs/lab-secure/
 ```
 
 
-Check the rsynced log files
+I check the rsynced log files to see if they are being generated.
 ```
 ls -lah /opt/splunk-logs/lab-secure/
 ```
 
 
-## Splunk Universal Forwarder Setup From Jump Server To Splunk Machine
+## Splunk Universal Forwarder Setup From Jump Server To Splunk Indexer
 
 ###### Download Splunk Universal Forwarder on the jump server 
 I got the download link from here:
 ```
 https://www.splunk.com/en_us/download/universal-forwarder.html?locale=en_us
 ```
+Then ran the wget command:
 ```
 wget -O splunkforwarder-10.0.2-e2d18b4767e9.x86_64.rpm \
   "https://download.splunk.com/products/universalforwarder/releases/10.0.2/linux/splunkforwarder-10.0.2-e2d18b4767e9.x86_64.rpm"
@@ -775,7 +795,10 @@ wget -O splunkforwarder-10.0.2-e2d18b4767e9.x86_64.rpm \
 ```
 sudo rpm -ivh splunkforwarder-10.0.2-e2d18b4767e9.x86_64.rpm
 ```
-_The RPM installation automatically creates the splunkfwd user and group, and installs to /opt/splunkforwarder._
+<Callout>
+Note: The RPM installation automatically creates the splunkfwd user and group, and installs to /opt/splunkforwarder.
+</Callout>
+
 
 ###### Start the Universal Forwarder
 ```
@@ -875,18 +898,41 @@ For fine-grained control over file permissions, I installed acl and set proper p
 ```
 sudo dnf install acl
 
-# apply ACL recursively to directory and all existing files
+# 1. First, clear any existing ACLs to start fresh if it was already installed
+sudo setfacl -b /opt/splunk-logs/lab-secure
+sudo setfacl -b /opt/splunk-logs/lab-secure/*
+
+# 2. Set ACL on directory and files recursively
 sudo setfacl -R -m u:splunkfwd:r-x /opt/splunk-logs/lab-secure
 
-# fix the mask to allow the ACL to take effect
-sudo setfacl -m m::r-x /opt/splunk-logs/lab-secure/secure*
+# 3. Set the mask on the DIRECTORY (not the files)
+sudo setfacl -m m::r-x /opt/splunk-logs/lab-secure
 
-# set default ACL for future files created in this directory
-sudo setfacl -R -d -m u:splunkfwd:r-x /opt/splunk-logs/lab-secure
+# 4. Set default ACL for future files
+sudo setfacl -d -m u:splunkfwd:r-x /opt/splunk-logs/lab-secure
+sudo setfacl -d -m m::r-x /opt/splunk-logs/lab-secure
 
-# verify splunkfwd can read the files
-sudo -u splunkfwd ls -l /opt/splunk-logs/lab-secure/
-sudo -u splunkfwd head -5 /opt/splunk-logs/lab-secure/secure
+# 5. Verify the ACLs
+getfacl /opt/splunk-logs/lab-secure
+getfacl /opt/splunk-logs/lab-secure/secure
+
+# 6. Test access
+sudo -u splunkfwd cat /opt/splunk-logs/lab-secure/secure
+
+
+# 7. Additional testing:
+
+# Create a test file to verify default ACLs work
+echo "test" | sudo tee /opt/splunk-logs/lab-secure/test-file > /dev/null
+
+# Check if it has the correct ACL
+getfacl /opt/splunk-logs/lab-secure/test-file
+
+# Try to read it as splunkfwd
+sudo -u splunkfwd cat /opt/splunk-logs/lab-secure/test-file
+
+# Clean up
+sudo rm /opt/splunk-logs/lab-secure/test-file
 
 ```
 
@@ -916,19 +962,20 @@ sudo systemctl restart SplunkForwarder
 sudo systemctl status SplunkForwarder
 ```
 
-## Windows Splunk Client Settings
+## Rocky Linux Splunk Indexer Settings
 
-###### Enable Receiving on 9997 port from Splunk Web UI
+###### Enable Receiving data on 9997 port from Splunk Web UI
 Splunk web UI default port is 8000.
 I went to `http://localhost:8000` then logged in with my admin credentials.
 
 I added a new __Receiving Port__ under __Settings__ -> __Forwarding and Receiving__ -> __Configure receiving__, then added port __9997__.
 
-###### Allow inbound traffic on port 9997
-I opened up __Windows Defender Firewall__ then I clicked __Advanced Settings__.
-I added a __New Inbound Rule__ -> Port -> TCP 9997.
-![firewall1](/static/blogImages/blog1/firewall1.PNG)
-![firewall2](/static/blogImages/blog1/firewall2.PNG)
+###### Allow inbound traffic on tailscale subnet port 9997
+```
+sudo firewall-cmd --add-rich-rule='rule family="ipv4" source address="100.64.0.0/10" port protocol="tcp" port="9997" accept' --permanent
+sudo firewall-cmd --reload
+sudo firewall-cmd --list-all
+```
 
 
 ###### Test with `nc` from jump server to splunk client machine on port 9997
@@ -940,7 +987,73 @@ nc -vz 100.x.x.x 9997
 
 ## Identification / Detection
 
-## Lessons learned
+###### Top 10 Users Attempting `ssh` Access
+For logging the top 10 users attempting to gain access via ssh, I searched for the following:
+```
+source="/opt/splunk-logs/lab-secure/secure*" sourcetype=linux_secure 
+| rex field=_raw "user (?<user>\S+)" 
+| fillnull value="scanner" user 
+| top limit=10 user
+```
+<Callout>
+    Note: The `fillnull` command covers cases where the log says "Connection closed by IP without a username" 
+</Callout>
+
+Then I clicked on visualization tab and selected __Pie Chart__.
+![splunk1](/static/blogImages/blog1/splunk1.png)
+
+
+###### IP Origin & Geographic Location
+For visualizing the source of the requests, I searched for the following:
+```
+source="/opt/splunk-logs/lab-secure/secure" sourcetype=linux_secure 
+| rex field=_raw " (?<src_ip>\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}) "
+| iplocation src_ip
+| geostats count by City
+```
+
+* `| rex field=_raw " (?<src_ip>\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}) "`: This uses `Regex` to find the IP address hidden inside the raw log text.
+* `| iplocation src_ip`: This is a built-in Splunk command that takes the IP address and checks against an internal database. It automatically adds City, Country, Region, and Coordinate data to the search results.
+* `| geostats count by City`: This prepares the data specifically for the `Cluster Map` visualization. 
+
+Then I clicked on visualization tab and selected __Cluster Map__.
+![splunk2](/static/blogImages/blog1/splunk2.png)
+![splunk3](/static/blogImages/blog1/splunk3.png)
+
+
+###### Daily Occurence rate
+For visualizing daily trends, I searched for the following:
+```
+source="/opt/splunk-logs/lab-secure/secure" sourcetype=linux_secure 
+| bin _time span=1d 
+| stats count by _time
+```
+Then I clicked on visualization tab and selected __Area Chart__.
+![splunk4](/static/blogImages/blog1/splunk4.png)
+
+## Conclusion
+In this blog post, I leveraged the OCI free tier, tailscale, and splunk to create a secure, log centric penetration testing environment. By implementing an automated log size monitoring script using `OCI CLI`, I am easily managing 500MB/day Splunk free tier ingestion limit.
+
+Furthermore, the combination of a dedicated jump server and granular tailscale ACLs ensures a crucial layer of separation, protecting my trusted homelab devices from potential compromise in the cloud environment.
+
+The visualizations generated in Splunk, from identifying top attack origins and monitoring daily traffic spikes, validate the entire log pipeline, transforming raw access ssh attempts into actionable threat intelligence. Moving forward, I plan on looking at various user names that were used and create misconfigured services around these usernames and integrate logs from more complex sources such as __web servers, databases, and intrusion detection systems__ to build a more informative logging lab. 
+
 
 ## Resources
+https://blogs.oracle.com/observability/la-demystifying-agent-om-oci
+
+https://learn.microsoft.com/en-us/security/privileged-access-workstations/privileged-access-intermediaries
+
+https://tailscale.com/kb/1508/control-data-planes#coordination-server
+
+https://tailscale.com/kb/1212/shared-responsibility
+
 https://tailscale.com/kb/1149/cloud-oracle
+
+https://github.com/oracle/oci-cli
+
+https://docs.oracle.com/en-us/iaas/Content/API/Concepts/cliconcepts.htm
+
+https://community.splunk.com/t5/Security/What-salts-the-password-hash/m-p/9272
+
+https://help.splunk.com/en/splunk-cloud-platform/forward-and-process-data/universal-forwarder-manual/9.0/configure-the-universal-forwarder/enable-a-receiver-for-splunk-enterprise
