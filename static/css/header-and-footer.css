@@ -6,7 +6,6 @@ footer {
 
 :where(header, footer) a {
 	text-decoration: none;
-
 }
 
 :where(header, footer) nav ul {
@@ -31,7 +30,7 @@ header {
 	align-items: center;
 }
 
-@media (min-width: 48rem) {
+@media (min-width: 100px) {
 	header {
 		justify-content: center;
 		flex-wrap: wrap;
@@ -50,7 +49,7 @@ header {
 	font-size: 1.4rem;
 	font-weight: bold;
 
-	@media (min-width: 48rem) {
+	@media (min-width: 100px) {
 		width: 100%;
 		font-size: 1.6rem;
 	}
@@ -65,7 +64,7 @@ header {
 	width: 2rem;
 }
 
-@media (min-width: 48rem) {
+@media (min-width: 100px) {
 	.menu-button {
 		display: none;
 	}
@@ -153,7 +152,7 @@ header {
 	margin-bottom: calc(0.2rem + 2vh);
 }
 
-@media (min-width: 48rem) {
+@media (min-width: 100px) {
 	header .main-nav {
 		opacity: 1;
 		transform: none;
@@ -191,7 +190,7 @@ footer {
 	gap: 2rem;
 }
 
-@media (min-width: 48rem) {
+@media (min-width: 100px) {
 	footer {
 		grid-template-columns: 1fr 1fr 2fr;
 	}
@@ -214,7 +213,7 @@ footer nav {
 	display: initial;
 }
 
-@media (min-width: 48rem) {
+@media (min-width: 100px) {
 	footer nav {
 		border-right: 1px solid var(--dark);
 	}

@@ -8,7 +8,7 @@
 		"build": "vite build",
 		"preview": "vite preview",
 		"prepare": "svelte-kit sync || echo ''",
-		"deploy": "bun run build && wrangler pages deploy"
+		"deploy": "bun run build && bunx wrangler pages deploy"
 	},
 	"devDependencies": {
 		"@sveltejs/adapter-auto": "^7.0.0",
