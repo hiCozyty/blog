@@ -2,18 +2,18 @@
 	let { posts = [] } = $props();
 </script>
 
-
 <ul class="posts-list">
 	{#each posts as post}
 		<li class="no-select">
 			<article>
-				<a href="/blog/{post.slug}">
+				<!-- <a href="/blog/{post.slug}"> -->
+				<a href="/{post.slug}">
 					<img
-					src={post.coverImage}
-					alt=""
-					width={post.coverWidth}
-					height={post.coverHeight}
-					style="ratio: {post.coverWidth} / {post.coverHeight}"
+						src={post.coverImage}
+						alt=""
+						width={post.coverWidth}
+						height={post.coverHeight}
+						style="ratio: {post.coverWidth} / {post.coverHeight}"
 					/>
 					<h2>
 						{post.title}
