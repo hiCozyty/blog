@@ -6,6 +6,7 @@
 
 export const siteTitle = "cozyty's blog"
 export const siteDescription = "cozyty's blog"
+export const siteUrl = 'https://cozyty.blog' // Update this to match your actual deployed domain
 
 // export const siteAuthor = '- find and change this text in src/lib/config.js'
 
